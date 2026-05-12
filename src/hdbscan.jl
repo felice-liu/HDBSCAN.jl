@@ -3,7 +3,7 @@ module hdbscan
     import Pkg;
     Pkg.add("Missings")
     using Missing
-
+    using Distances
 
     import _linkage:
         MST_edge_dtype,
@@ -127,7 +127,5 @@ module hdbscan
     function dbscan_clustering(self, cut_distance, min_cluster_size=5)
     end
 
-    function __sklearn_tags__(self)
-    end
     =#
 end

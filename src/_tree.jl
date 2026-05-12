@@ -195,8 +195,9 @@ function _compute_stability(condensed_tree)
 
     largest_child = maximum([c.child for c in condensed_tree]) #9
     smallest_cluster = minimum(parents) #10
-    num_clusters = maximum(parents) - smallest_cluster + 1
+    num_clusters = maximum(parents) - smallest_cluster + 1 # 1
 
+    largest_child = max(largest_child, smallest_cluster)
     births = fill(NaN, largest_child + 1)
 
     for idx in eachindex(condensed_tree)
@@ -206,26 +207,32 @@ function _compute_stability(condensed_tree)
 
     births[smallest_cluster + 1] = 0.0
 
-    result = zeros(Float64, num_clusters)
+    result = zeros(Float64, maximum(parents) + 1)
 
     for idx in eachindex(condensed_tree)
         condensed_node = condensed_tree[idx]
-        parent = condensed_node.parent
+        parent = condensed_node.parent + 1
         lambda_val = condensed_node.value
         cluster_size = condensed_node.cluster_size
         
         result_index = parent - smallest_cluster
-        result[result_index] += (lambda_val - births[parent]) * cluster_size
+        result[result_index] = result[result_index] +
+            ((lambda_val - births[parent]) * cluster_size)
     end
 
     stability_dict = Dict{Int, Float64}()
 
-    for idx in 1:(num_clusters + 1)
-        stability_dict[idx + smallest_cluster] = result[idx]
+    for idx in 1:num_clusters
+        stability_dict[idx + smallest_cluster - 1] = result[idx]
     end
 
     return stability_dict
 end
+
+#= Dict{Int64, Float64} with 1 entry:
+  10 => 10.0 
+Validato con python  
+=#
 
 function bfs_from_cluster_tree(condensed_tree, bfs_root)
     result = []
@@ -244,15 +251,33 @@ function bfs_from_cluster_tree(condensed_tree, bfs_root)
     return result
 end
 
-function max_lambdas(condensed_tree)
-    largest_parent = maximum([c.parent for c in condensed_tree])
-    deaths = zeros(Float64, largest_parent + 1)
+#=
 
-    current_parent = condensed_tree[1].parent
+11-element Vector{Any}:
+ 10
+  8
+  9
+  0
+  1
+  2
+  3
+  4
+  5
+  6
+  7
+
+  Validato con Python
+=#
+
+function max_lambdas(condensed_tree)
+    largest_parent = maximum([c.parent for c in condensed_tree]) + 1
+    deaths = zeros(Float64, largest_parent)
+
+    current_parent = condensed_tree[1].parent + 1
     max_lambda = condensed_tree[1].value
 
     for i in 2:length(condensed_tree)
-        parent = condensed_tree[i].parent
+        parent = condensed_tree[i].parent + 1
         lambda_val = condensed_tree[i].value
 
         if parent == current_parent
@@ -267,66 +292,98 @@ function max_lambdas(condensed_tree)
     return deaths
 end
 
+#=
+11-element Vector{Float64}:
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+ 0.0
+ 1.0
+=#
+
 mutable struct TreeUnionFind
     data::Array{Int,2}
-    is_component::Vector{Int}
+    is_component::Vector{Bool}
 end
 
 function init_TreeUnionFind(size)
     data = zeros(Int, size, 2)
     for i in 1:size
-        data[i,1] = i
+        data[i,1] = i - 1
     end
     is_component = trues(size)
     tuf = TreeUnionFind(data, is_component)
     return tuf
 end
 
-function union(tuf, x, y)
-    x_root = find(tuf, x)
-    y_root = find(tuf, y)
+#= size 5
+TreeUnionFind([0 0; 1 0; Åc ; 3 0; 4 0], [1, 1, 1, 1, 1])
+=#
 
-    if tuf.data[x_root,2] < tuf.data[y_root,2]
-        tuf.data[x_root,1] = y_root
-    elseif tuf.data[x_root,2] > tuf.data[y_root,2]
-        tuf.data[y_root,1] = x_root
+
+function union(tuf, x, y)
+
+    x += 1
+    y += 1
+
+    x_root = find(tuf, x - 1) + 1
+    y_root = find(tuf, y - 1) + 1
+
+    if tuf.data[x_root,2] < tuf.data[y_root, 2]
+        tuf.data[x_root,1] = y_root -1
+    elseif tuf.data[x_root,2] > tuf.data[y_root, 2]
+        tuf.data[y_root,1] = x_root -1
     else
-        tuf.data[y_root,1] = x_root
-        tuf.data[x_root,2] += 1
+        tuf.data[y_root,1] = x_root - 1
     end
+    return tuf
+    #print(tuf.data)
 end
 
+#= union(tuf, 2, 4)
+print -> [1 0; 2 2; 3 0; 2 0; 5 0]
+=#
+
 function find(tuf, x)
-    if tuf.data[x,1] != x
+    x = x + 1
+    if tuf.data[x,1] != x - 1
         tuf.data[x,1] = find(tuf, tuf.data[x,1])
         tuf.is_component[x] = false
     end
     return tuf.data[x,1]
 end
 
+# find(tuf, 3) -> 3
+
 
 function labelling_at_cut(linkage, cut, min_cluster_size)
-    root = 2 * length(linkage) + 1
+    root = 2 * length(linkage) + 1 #1 index
     n_samples = div(root, 2) + 1
 
     result = zeros(Int, n_samples)
-    union_find = init_TreeUnionFind(root + 1)
+    union_find = init_TreeUnionFind(root - 1)
 
     cluster = n_samples
     for node in linkage
         if node.value < cut
-            union(union_find, node.left_node, cluster)
-            union(union_find, node.right_node, cluster)
+            union_find = union(union_find, node.left_node, cluster - 1)
+            union_find = union(union_find, node.right_node, cluster - 1)
         end
         cluster += 1
     end
 
     cluster_size = zeros(Int, cluster + 1)
 
-    for n in 1:n_samples
+    for n in 0:n_samples
         cluster = find(union_find, n)
         cluster_size[cluster] += 1
-        result[n] = cluster
+        result[n + 1] = cluster
     end
 
     cluster_label_map = Dict(-1 => NOISE)
@@ -412,10 +469,10 @@ function get_probabilities(condensed_tree, cluster_map, labels)
 
     result = zeros(Float64, length(labels))
     deaths = max_lambdas(condensed_tree)
-    root_cluster = minimum(parent_array)
+    root_cluster = minimum(parent_array) + 1
 
     for i in eachindex(condensed_tree)
-        point = child_array[i]
+        point = child_array[i] + 1
         if point >= root_cluster
             continue
         end
@@ -434,10 +491,31 @@ function get_probabilities(condensed_tree, cluster_map, labels)
             lambda_val = min(lambda_array[i], max_lambda)
             result[point] = lambda_val / max_lambda
         end
+        println(
+    "point=", point,
+    " label=", cluster_num,
+    " cluster=", cluster,
+    " lambda=", lambda_array[i],
+    " death=", max_lambda
+)
     end
-
+    
     return result
 end
+
+#= get_probabilities([CONDENSED_t(10, 0, 0.4, 1),
+    CONDENSED_t(10, 1, 0.7, 1),
+    CONDENSED_t(11, 2, 1.2, 1),
+    CONDENSED_t(11, 3, 0.9, 1),
+    CONDENSED_t(12, 4, 2.0, 1),],
+    Dict(0 => 10,
+        1 => 11,
+        2 => 12),
+    [0, 0, 1, 1, 2]
+
+)
+=#
+
 
 function recurse_leaf_dfs(cluster_tree, current_node)
     children = [c.child for c in cluster_tree if c.parent == current_node]
@@ -453,6 +531,20 @@ function recurse_leaf_dfs(cluster_tree, current_node)
     end
 end
 
+#=  recurse_leaf_dfs(_condense_tree(hierarchy_test_tree_python), 10)
+10-element Vector{Any}:
+ 8
+ 9
+ 0
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ =#
+
 function get_cluster_tree_leaves(cluster_tree)
 
     if isempty(cluster_tree)
@@ -462,13 +554,27 @@ function get_cluster_tree_leaves(cluster_tree)
     return recurse_leaf_dfs(cluster_tree, root)
 end
 
+#=
+10-element Vector{Any}:
+ 8
+ 9
+ 0
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+=#
+
 function traverse_upwards(cluster_tree,
     cluster_selection_epsilon,
     leaf,
     allow_single_cluster)
 
     root = minimum([c.parent for c in cluster_tree])
-    parent = [c.parent for c in cluster_tree if c.child == leaf]
+    parent = only([c.parent for c in cluster_tree if c.child == leaf])
 
     if parent == root
         if allow_single_cluster
@@ -478,7 +584,7 @@ function traverse_upwards(cluster_tree,
         end
     end
 
-    parent_eps = 1 / [c.value for c in cluster_tree if c.child == parent]
+    parent_eps = 1 / only([c.value for c in cluster_tree if c.child == parent])
 
     if parent_eps > cluster_selection_epsilon
         return parent
@@ -487,6 +593,11 @@ function traverse_upwards(cluster_tree,
         parent, allow_single_cluster)
     end
 end
+
+#=
+traverse_upwards(_condense_tree(hierarchy_test_tree_python), 0.5, 5, true)
+10
+=#
 
 function epsilon_search(leaves,
     cluster_tree,

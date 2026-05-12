@@ -129,7 +129,7 @@ print(dir(DistanceMetrics64))
 'mst_from_mutual_reachability', 'np']
 
 '''
-
+import sklearn.metrics._dist_metrics as distance_metric
 import sklearn.cluster._hdbscan._linkage as linkage
 print(dir(linkage))
 
@@ -138,11 +138,66 @@ print(dir(linkage))
 '__loader__', '__name__', '__package__', '__spec__', '__test__',
 'make_single_linkage', 'mst_from_data_matrix',
 'mst_from_mutual_reachability', 'np']
-'''
+
 
 def test_linkage():
     make_single_linkage_test()
     mst_from_data_matrix()
     mst_from_mutual_reachability()
+'''
+'''
+raw_data = np.array([
+    [0.0, 0.0],
+    [1.0, 0.0],
+    [0.0, 1.0],
+    [1.0, 1.0],
+    [3.0, 3.0]
+], dtype=np.float64)
+
+core_distances = np.array([
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    2.5
+], dtype=np.float64)
+
+dist_metric = distance_metric.EuclideanDistance64()
+alpha = 1.0
 
 
+data_matrix = linkage.mst_from_data_matrix(raw_data, core_distances,
+    dist_metric, alpha)
+
+
+for i in data_matrix:
+    print(*i, sep=" ")
+'''
+'''
+mst = np.array([
+    (0, 1, 1.0),
+    (0, 2, 1.0),
+    (1, 3, 1.5),
+    (3, 4, 2.8)], dtype=linkage.MST_edge_dtype)
+
+s_linkage = linkage.make_single_linkage(mst) 
+
+for row in s_linkage:
+    print(*row, sep=" ")
+'''
+'''
+0 1 1.0 2
+5 2 1.0 3
+6 3 1.5 4
+7 4 2.8 5
+'''
+
+import sklearn.cluster._hdbscan._reachability as reachability
+print(dir(reachability))
+
+'''
+['__builtins__', '__doc__', '__file__', '__loader__', '__name__', '__package__',
+ '__spec__', '__test__', '_dense_mutual_reachability_graph',
+ '_sparse_mutual_reachability_graph', 'issparse', 'mutual_reachability_graph',
+ 'np']
+'''

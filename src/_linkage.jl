@@ -1,3 +1,12 @@
+using Distances
+
+mutable struct HIERARCHY_t
+    left_node::Int
+    right_node::Int
+    value::Float64
+    cluster_size::Int
+end
+
 struct MST_edge_t
     current_node::Int64
     next_node::Int64
@@ -9,18 +18,21 @@ mutable struct UnionFind
     size::Vector{Int}
 end
 
-function UnionFind(n)
+function init_UnionFind(n)
     parent = collect(0:n-1)
     size = ones(Int, n)
     return UnionFind(parent, size)
 end
 
 function find(U::UnionFind, x)
-    while U.parent[x + 1] != x
-        U.parent[x + 1] = parent[parent[x + 1]]
-        x = U.parent[x + 1]
+
+    parent = U.parent[x + 1]
+
+    if parent != x
+        U.parent[x + 1] = find(U, parent)
     end
-    return x
+
+    return U.parent[x + 1]
 end
 
 function union(U::UnionFind, x, y)
@@ -31,21 +43,15 @@ function union(U::UnionFind, x, y)
         return x_root
     end
 
-    if U.size[x_root +1] < U.size[y_root + 1]
+    if U.size[x_root + 1] < U.size[y_root + 1]
         x_root, y_root = y_root, x_root
     end
 
     U.parent[y_root + 1]= x_root
-    U.size[x_root] += U.size[y_root]
+    U.size[x_root + 1] += U.size[y_root + 1]
 
     return x_root
 end
-
-#=
-function dist(dist_metric, )
-
-end
-=#
 
 
 function mst_from_mutual_reachability(mutual_reachability::Matrix{Float64})
@@ -59,7 +65,6 @@ function mst_from_mutual_reachability(mutual_reachability::Matrix{Float64})
     min_reachability = fill(Inf, n_samples)
 
     for i in 1:(n_samples - 1)
-        # filter labels
         mask = current_labels .!= current_node
         current_labels = current_labels[mask]
 
@@ -82,6 +87,19 @@ function mst_from_mutual_reachability(mutual_reachability::Matrix{Float64})
 
     return mst
 end
+
+#=
+mst_from_mutual_reachability([
+    0.0  1.0  4.0  3.0;
+    1.0  0.0  2.0  5.0;
+    4.0  2.0  0.0  1.5;
+    3.0  5.0  1.5  0.0])
+
+3-element Vector{MST_edge_t}:
+ MST_edge_t(0, 1, 1.0)
+ MST_edge_t(1, 2, 2.0)
+ MST_edge_t(2, 3, 1.5)
+=#
 
 
 function mst_from_data_matrix(
@@ -118,10 +136,9 @@ function mst_from_data_matrix(
             next_node_min_reach = min_reachability[j + 1]
             next_node_source = current_sources[j + 1]
 
-            pair_distance = dist(dist_metric,
+            pair_distance = Distances.evaluate(dist_metric,
                 view(raw_data, current_node + 1, :),
-                view(raw_data, j + 1, :),
-                num_features
+                view(raw_data, j + 1, :)
             )
 
             pair_distance /= alpha
@@ -158,24 +175,44 @@ function mst_from_data_matrix(
     return mst
 end
 
+#= mst_from_data_matrix(
+    [0.0 0.0;
+    1.0 0.0;
+    0.0 1.0;
+    1.0 1.0;
+    3.0 3.0],
 
+    [1.0,
+    1.0,
+    1.0,
+    1.0,
+    2.5],
 
+    Euclidean(),
 
+    1.0)
+
+    4-element Vector{MST_edge_t}:
+ MST_edge_t(0, 1, 1.0)
+ MST_edge_t(0, 2, 1.0)
+ MST_edge_t(1, 3, 1.0)
+ MST_edge_t(3, 4, 2.8284271247461903)
+=#
 
 function make_single_linkage(mst::Vector{MST_edge_t})
     n_samples = length(mst) + 1
 
     single_linkage = Vector{HIERARCHY_t}(undef, n_samples - 1)
 
-    U = UnionFind(n_samples)
+    U = init_UnionFind(n_samples)
 
-    for i in 1:(n_samples - 1)
+    for i in 1:n_samples - 1
         current_node = mst[i].current_node
         next_node = mst[i].next_node
         distance = mst[i].distance
 
-        current_node_cluster = fast_find(U, current_node)
-        next_node_cluster = fast_find(U, next_node)
+        current_node_cluster = find(U, current_node)
+        next_node_cluster = find(U, next_node)
 
         single_linkage[i] = HIERARCHY_t(
             current_node_cluster,
@@ -184,9 +221,18 @@ function make_single_linkage(mst::Vector{MST_edge_t})
             U.size[current_node_cluster+1] + U.size[next_node_cluster+1]
         )
 
-        union(U, current_node_cluster, next_node_cluster)
+        U = union(U, current_node_cluster, next_node_cluster)
     end
 
     return single_linkage
 
 end
+#=
+    l_mst = [
+    MST_edge_t(0, 1, 1.0),
+    MST_edge_t(0, 2, 1.0),
+    MST_edge_t(1, 3, 1.5),
+    MST_edge_t(3, 4, 2.8)]
+    
+    make_single_linkage(l_mst)
+=#
