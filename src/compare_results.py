@@ -26,36 +26,34 @@ COMPARISON_RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 DATASET_CONFIGS = {
     
-    # SYNTHETIC DATASETS
     "circles": {
-        "kind": "synthetic",
+        "kind": "preprocessed",
         "path": DATA_DIR / "circles_dataset.csv",
     },
     "moons": {
-        "kind": "synthetic",
+        "kind": "preprocessed",
         "path": DATA_DIR / "moons_dataset.csv",
     },
     "varied": {
-        "kind": "synthetic",
+        "kind": "preprocessed",
         "path": DATA_DIR / "varied_dataset.csv",
     },
     "aniso": {
-        "kind": "synthetic",
+        "kind": "preprocessed",
         "path": DATA_DIR / "aniso_dataset.csv",
     },
     "blobs": {
-        "kind": "synthetic",
+        "kind": "preprocessed",
         "path": DATA_DIR / "blobs_dataset.csv",
     },
     "no_structure": {
-        "kind": "synthetic",
+        "kind": "preprocessed",
         "path": DATA_DIR / "no_structure_dataset.csv",
     },
 
-    # REAL DATASETS
 
     "heartfailure": {
-        "kind": "real",
+        "kind": "unprocessed",
         "path": DATA_DIR / "heartfailure.csv",
         "feature_cols": [
             "Age (years)",
@@ -81,7 +79,7 @@ DATASET_CONFIGS = {
     },
 
     "cardiacarrest": {
-        "kind": "real",
+        "kind": "unprocessed",
         "path": DATA_DIR / "cardiacarrest.csv",
         "feature_cols": [
             "sex_woman",
@@ -100,7 +98,7 @@ DATASET_CONFIGS = {
     },
 
     "neuroblastoma": {
-        "kind": "real",
+        "kind": "unprocessed",
         "path": DATA_DIR / "neuroblastoma.csv",
         "feature_cols": [
             "age",
@@ -122,7 +120,7 @@ DATASET_CONFIGS = {
     },
 
     "sepsis": {
-        "kind": "real",
+        "kind": "unprocessed",
         "path": DATA_DIR / "sepsis.csv",
         "feature_cols": [
             "Age",
@@ -147,7 +145,7 @@ DATASET_CONFIGS = {
     },
 
     "type1diabetes": {
-        "kind": "real",
+        "kind": "unprocessed",
         "path": DATA_DIR / "type1diabetes.csv",
         "feature_cols": [
             "age",
@@ -200,8 +198,7 @@ BASE_COLORS = [
     "#984ea3",
     "#999999",
     "#e41a1c",
-    "#dede00",
-]
+    "#dede00",]
 
 
 def parse_vector_string(s, dtype=float):
@@ -211,15 +208,7 @@ def parse_vector_string(s, dtype=float):
 
 
 def load_dataset_bundle(dataset_name):
-    """
-    Returns:
-        X : np.ndarray
-            Feature matrix actually used for clustering/comparison.
-        labels_dict : dict[str, np.ndarray]
-            Ground-truth labels for external evaluation (ARI/NMI).
-        extras_dict : dict[str, np.ndarray]
-            Optional extra columns (e.g. survival times).
-    """
+
     if dataset_name not in DATASET_CONFIGS:
         raise ValueError(f"Unknown dataset '{dataset_name}'")
 
@@ -229,66 +218,31 @@ def load_dataset_bundle(dataset_name):
     if not path.exists():
         raise FileNotFoundError(f"Missing dataset file: {path}")
 
-    # ============================================================
-    # SYNTHETIC DATASETS
-    # ============================================================
-    if cfg["kind"] == "synthetic":
+    if cfg["kind"] == "preprocessed":
         X = pd.read_csv(path, header=None).to_numpy(dtype=float)
         return X, {}, {}
 
-    # ============================================================
-    # REAL DATASETS
-    # ============================================================
-    elif cfg["kind"] == "real":
+    elif cfg["kind"] == "unprocessed":
         df = pd.read_csv(path)
 
-        # Normalize column names to avoid trailing-space problems
-        df.columns = [str(c).strip() for c in df.columns]
+        X_df = df[cfg["feature_cols"]].copy()
+        X_df = X_df.apply(pd.to_numeric, errors="coerce")
 
-        feature_cols = [str(c).strip() for c in cfg["feature_cols"]]
-        label_cols = {
-            label_name: str(col_name).strip()
-            for label_name, col_name in cfg.get("label_cols", {}).items()
-        }
-        extra_cols = {
-            extra_name: str(col_name).strip()
-            for extra_name, col_name in cfg.get("extra_cols", {}).items()
-        }
-
-        # -------------------------
-        # Features
-        # -------------------------
-        X_df = df[feature_cols].copy()
-
-        # Convert everything to numeric; invalid values -> NaN
-        for col in X_df.columns:
-            X_df[col] = pd.to_numeric(X_df[col], errors="coerce")
-
-        # Impute missing values with median
         imputer = SimpleImputer(strategy="median")
         X = imputer.fit_transform(X_df)
 
-        # Standardize
         scaler = StandardScaler()
         X = scaler.fit_transform(X)
 
-        X = X.astype(float)
+        labels_dict = {
+            label_name: df[col_name].to_numpy(dtype=int)
+            for label_name, col_name in cfg.get("label_cols", {}).items()
+        }
 
-        # -------------------------
-        # Ground-truth labels
-        # -------------------------
-        labels_dict = {}
-        for label_name, col_name in label_cols.items():
-            labels_dict[label_name] = pd.to_numeric(
-                df[col_name], errors="coerce"
-            ).to_numpy()
-
-        # -------------------------
-        # Extra columns
-        # -------------------------
-        extras_dict = {}
-        for extra_name, col_name in extra_cols.items():
-            extras_dict[extra_name] = df[col_name].to_numpy()
+        extras_dict = {
+            extra_name: df[col_name].to_numpy()
+            for extra_name, col_name in cfg.get("extra_cols", {}).items()
+        }
 
         return X, labels_dict, extras_dict
 
@@ -351,10 +305,7 @@ def labels_to_colors(labels):
 
 
 def project_for_plot(X):
-    """
-    If X already has 2 columns, use it directly.
-    Otherwise project to 2D with PCA for visualization.
-    """
+
     X = np.asarray(X, dtype=float)
     if X.shape[1] == 2:
         return X
@@ -369,7 +320,7 @@ def plot_panel(ax, X_plot, labels, title, fit_time, dbcv):
     ax.set_yticks(())
     ax.set_title(title, fontsize=12)
 
-    dbcv_text = "nan" if np.isnan(dbcv) else f"{dbcv:.6f}"
+    dbcv_text = "nan" if np.isnan(dbcv) else f"{dbcv:.32f}"
     ax.text(
         0.99,
         0.01,
@@ -382,10 +333,7 @@ def plot_panel(ax, X_plot, labels, title, fit_time, dbcv):
 
 
 def compute_external_metrics(labels_dict, cluster_labels):
-    """
-    Compare cluster labels to each ground-truth label vector.
-    Returns a flat dict.
-    """
+
     out = {}
 
     if not labels_dict:
@@ -405,7 +353,7 @@ def compute_external_metrics(labels_dict, cluster_labels):
     return out
 
 
-def compare_datasets(dataset_names, run_name="comparison"):
+def compare_datasets(dataset_names, run_name, julia_algo_name, python_algo_name):
     summary_rows = []
 
     fig, axes = plt.subplots(len(dataset_names), 2, figsize=(10, 4 * len(dataset_names)))
@@ -418,8 +366,8 @@ def compare_datasets(dataset_names, run_name="comparison"):
         X, labels_dict, extras_dict = load_dataset_bundle(dataset_name)
         X_plot = project_for_plot(X)
 
-        py = load_result(PYTHON_RESULT_DIR / f"{dataset_name}_hdbscan_python.csv")
-        jl = load_result(JULIA_RESULT_DIR / f"{dataset_name}_hdbscan_julia.csv")
+        py = load_result(PYTHON_RESULT_DIR / f"{dataset_name}_{python_algo_name}_python.csv")
+        jl = load_result(JULIA_RESULT_DIR / f"{dataset_name}_{julia_algo_name}_julia.csv")
 
         py_dbcv = safe_dbcv(X, py["labels"])
         jl_dbcv = safe_dbcv(X, jl["labels"])
@@ -473,8 +421,8 @@ def compare_datasets(dataset_names, run_name="comparison"):
     out_dir = COMPARISON_RESULT_DIR / run_name
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    summary_path = out_dir / f"{run_name}_comparison_summary.csv"
-    plot_path = out_dir / f"{run_name}_clustering_visualized.png"
+    summary_path = out_dir / f"{run_name}_comparison_summary_julia_{julia_algo_name}_vs_python_{python_algo_name}.csv"
+    plot_path = out_dir / f"{run_name}_clustering_visualized_julia_{julia_algo_name}_vs_python_{python_algo_name}.png"
 
     summary_df.to_csv(summary_path, index=False, float_format="%.32f")
     plt.savefig(plot_path, dpi=200, bbox_inches="tight")
@@ -487,8 +435,8 @@ def compare_datasets(dataset_names, run_name="comparison"):
 
 
 def main():
-    compare_datasets(DATASETS_TO_COMPARE, run_name="all_datasets")
-    # compare_datasets(["hf"], run_name="hf_real")
+    compare_datasets(DATASETS_TO_COMPARE, run_name="all_datasets",
+    julia_algo_name="hdbscan", python_algo_name="hdbscan")
 
 
 if __name__ == "__main__":

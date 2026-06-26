@@ -1,5 +1,33 @@
+#=
+   HDBSCAN:
+   Hierarchical Density-Based Spatial Clustering of Applications with Noise
+
+   HDBSCAN is a clustering algorithm that Performs DBSCAN over varying epsilon
+   values and integrates the result to find a clustering that gives the best
+   stability over epsilon
+
+   It returns a good clustering straight away with little or no parameter tuning.
+   The primary parameter, minimum cluster size, is intuitive and easy to select.
+
+   Based on the papers:
+
+    McInnes L, Healy J. Accelerated Hierarchical Density Based Clustering In:
+    2017 IEEE International Conference on Data Mining Workshops (ICDMW), IEEE,
+    pp 33-42. 2017
+
+    R. Campello, D. Moulavi, and J. Sander, Density-Based Clustering Based on
+    Hierarchical Density Estimates In: Advances in Knowledge Discovery and Data
+    Mining, Springer, pp 160-172. 2013
+
+=#
+
+
+
+#=
+    Required libraries
+    Quick mass installation -> uncomment
+
     import Pkg;
-    #=
     Pkg.add("Statistics")
     Pkg.add("SparseArrays")
     Pkg.add("Missings")
@@ -7,85 +35,139 @@
     Pkg.add("NearestNeighbors")
     Pkg.add("Graphs")
     Pkg.add("SimpleWeightedGraphs")
-    =#
-    using Statistics
-    using SparseArrays
-    using Missings
-    using Distances
-    using NearestNeighbors
-    using Graphs
-    using SimpleWeightedGraphs
+=#
 
-################################## _tree #####################################
+using Statistics
+using SparseArrays
+using Missings
+using Distances
+using NearestNeighbors
+using Graphs
+using SimpleWeightedGraphs
 
-    const INFTY = Inf
-    const NOISE = -1
+#=
+    This library is based on scikit-learn python implementation version 1.8.0
+    and it translates in Julia the 4 main code files found in the github page:
 
-    mutable struct HIERARCHY_t
-        left_node::Int
-        right_node::Int
-        value::Float64
-        cluster_size::Int
-    end
+    scikit-learn / sklearn / cluster / _hdbscan /
+        _tree.pyx
+        _reachability.pyx
+        _linkage.pyx
+        hdbscan.py
 
-    mutable struct CONDENSED_t
-        parent::Int
-        child::Int
-        value::Float64
-        cluster_size::Int
-    end
+    ref: https://github.com/scikit-learn/scikit-learn/tree/1.8.X/sklearn/cluster/_hdbscan
+=#
 
-    # Python index 0 -> Julia Index 1
+################################################################################
+#                                _tree.pyx                                     #
+################################################################################
 
-    function HIERARCHY_t_shift_index(
-        tree::Array{HIERARCHY_t})
+#= 
+    HIERARCHY_t
 
-        for n in tree
-            n.left_node += 1
-            n.right_node += 1
-        end
-        return tree
-    end
+    The HDBSCAN single-linkage hierarchy tree is represented by an 
+    Array{HIERARCHY_t}, where each entry is a merge event defined by:
 
-    hierarchy_test_tree_python = [HIERARCHY_t(0, 1, 0.1, 2),
-            HIERARCHY_t(2, 3, 0.2, 2),
-            HIERARCHY_t(4, 5, 0.3, 2),
-            HIERARCHY_t(6, 7, 0.4, 2),
-            HIERARCHY_t(8, 9, 0.5, 2),
-            HIERARCHY_t(10, 11, 0.6, 4),
-            HIERARCHY_t(12, 13, 0.7, 4),
-            HIERARCHY_t(15, 14, 0.8, 6),
-            HIERARCHY_t(17, 16, 1.0, 10)]
+    left_node::Int
+    right_node::Int
+        Identifiers of child in the merge.
+
+    value::Float64
+        Distance in the mutual reachability tree at which the two components
+        are joined.
+
+    cluster_size::Int
+        Number of points contained in the newly formed cluster.
+=#
+
+mutable struct HIERARCHY_t
+    left_node::Int
+    right_node::Int
+    value::Float64
+    cluster_size::Int
+end
+
+#=
+    CONDENSED_t
+
+    The condensed tree is the result of the "pruning" clusters that falls below
+    minimum cluster size.
+
+    It's represented by an Array{CONDENSED_t} where each entry is defined by:
     
-    hierarchy_test_tree_julia = HIERARCHY_t_shift_index(
-        hierarchy_test_tree_python)
+    parent::Int
+    Identifier of the parent cluster in the condensed tree.
 
-    function tree_to_labels(
-        single_linkage_tree::Array{HIERARCHY_t},
-        min_cluster_size::Int=10,
-        cluster_selection_method="eom",
-        allow_single_cluster::Bool=false,
-        cluster_selection_epsilon::Float64=0.0,
-        max_cluster_size=nothing)
+    child::Int
+    Identifier of the child cluster in the condensed tree.
 
-        condensed_tree = _condense_tree(single_linkage_tree, min_cluster_size)
-        labels, probabilities = _get_clusters(condensed_tree,
-            _compute_stability(condensed_tree),
-            cluster_selection_method,
-            allow_single_cluster,
-            cluster_selection_epsilon,
-            max_cluster_size,)
+    value::Float64
+    The persistence/split level where the child cluster survives. It's the alpha
+    value where alpha = 1 / distance
 
-        return (labels, probabilities)
+    cluster_size::Int
+    Number of points contained in child at this level of the condensed tree
+=#
+
+mutable struct CONDENSED_t
+    parent::Int
+    child::Int
+    value::Float64
+    cluster_size::Int
+end
+
+#=
+    function HIERARCHY_t_shift_index_python_to_julia
+    function HIERARCHY_t_shift_index_julia_to_python
+
+    Not included in the scikit-learn code. It defines the relation between
+    Python indexing (0-based) and Julia indexing (1-based) of hierarchy trees
+    for testing purposes.
+=#
+
+function HIERARCHY_t_shift_index_python_to_julia(
+    tree::Array{HIERARCHY_t})
+
+    for n in tree
+        n.left_node += 1
+        n.right_node += 1
     end
+    return tree
+end
 
-    #=  tree_to_labels(hierarchy_test_tree_julia,
-    2, "eom", false, 0.0, nothing)
+function HIERARCHY_t_shift_index_julia_to_python(
+    tree::Array{HIERARCHY_t})
 
-    ([3, 3, 4, 4, 1, 1, 2, 2, 0, 0], [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+    for n in tree
+        n.left_node -= 1
+        n.right_node -= 1
+    end
+    return tree
+end
 
-    -> Correct
-    =#
+#=
+    
+=#
+
+function tree_to_labels(
+    single_linkage_tree::Array{HIERARCHY_t},
+    min_cluster_size::Int=10,
+    cluster_selection_method="eom",
+    allow_single_cluster::Bool=false,
+    cluster_selection_epsilon::Float64=0.0,
+    max_cluster_size=nothing)
+
+    condensed_tree = _condense_tree(single_linkage_tree, min_cluster_size)
+    labels, probabilities = _get_clusters(condensed_tree,
+        _compute_stability(condensed_tree),
+        cluster_selection_method,
+        allow_single_cluster,
+        cluster_selection_epsilon,
+        max_cluster_size,)
+
+    return (labels, probabilities)
+end
+
 
     function bfs_from_hierarchy(
         hierarchy::Array{HIERARCHY_t}, bfs_root::Int)
@@ -978,45 +1060,39 @@ end
 =#
 
 function mst_from_mutual_reachability(mutual_reachability::Matrix{Float64})
+    
     n_samples = size(mutual_reachability, 1)
+    mst = Vector{MST_edge_t}(undef, n_samples - 1)
+    
+    current_labels = collect(1:n_samples)
+    current_node = 1
 
-    edges = Vector{MST_edge_t}()
-    sizehint!(edges, div(n_samples * (n_samples - 1), 2))
+    min_reachability = fill(Inf, n_samples)
 
-    for i in 1:(n_samples - 1)
-        for j in (i + 1):n_samples
-            push!(edges, MST_edge_t(i, j, mutual_reachability[i, j]))
-        end
-    end
+    for i in 1:n_samples -1
+        label_filter = current_labels .!= current_node
+        current_labels = current_labels[label_filter]
 
-    sort!(edges, by = e -> (
-        e.distance,
-        abs(e.current_node - e.next_node),
-        max(e.current_node, e.next_node),
-        min(e.current_node, e.next_node),
-    ))
+        left = min_reachability[label_filter]
+        right = mutual_reachability[current_node, current_labels]
 
-    uf = init_UnionFind(n_samples)
+        min_reachability = min.(left, right)
 
-    mst = Vector{MST_edge_t}()
-    sizehint!(mst, n_samples - 1)
+        new_node_index = argmin(min_reachability)
+        new_node = current_labels[new_node_index]
 
-    for e in edges
-        ru = link_find(uf, e.current_node)
-        rv = link_find(uf, e.next_node)
+        mst[i] = MST_edge_t(
+            current_node,
+            new_node,
+            min_reachability[new_node_index])
 
-        if ru != rv
-            push!(mst, e)
-            link_union(uf, ru, rv)
-
-            if length(mst) == n_samples - 1
-                break
-            end
-        end
+        current_node = new_node
     end
 
     return mst
 end
+
+
 
 #=
 mst_from_mutual_reachability([
@@ -1046,14 +1122,17 @@ function mst_from_data_matrix(
 
     in_tree = falses(n_samples)
     min_reachability = fill(Inf, n_samples)
-    current_sources = zeros(Int, n_samples)
+    current_sources = ones(Int, n_samples)
 
     current_node = 1
-    min_reachability[current_node] = 0.0
 
     for i in 1:(n_samples - 1)
+
         in_tree[current_node] = true
-        current_core = core_distances[current_node]
+        current_node_core_dist = core_distances[current_node]
+        new_reachability = Inf
+        source_node = 1
+        new_node = 1
 
         # Update frontier
         for j in 1:n_samples
@@ -1061,39 +1140,45 @@ function mst_from_data_matrix(
                 continue
             end
 
+            next_node_min_reach = min_reachability[j]
+            next_node_source = current_sources[j]
+
             pair_distance = Distances.evaluate(
                 dist_metric,
                 view(raw_data, current_node, :),
                 view(raw_data, j, :)
+
             ) / alpha
 
-            mr = max(current_core, core_distances[j], pair_distance)
+            next_node_core_dist = core_distances[j]
 
-            if mr < min_reachability[j]
-                min_reachability[j] = mr
+            mutual_reachability_distance = max(
+                current_node_core_dist,
+                next_node_core_dist,
+                pair_distance
+            )
+
+            if mutual_reachability_distance < next_node_min_reach
+                min_reachability[j] = mutual_reachability_distance
                 current_sources[j] = current_node
-            end
-        end
 
-        # Pick best next node globally
-        new_node = 0
-        new_reachability = Inf
-        for j in 1:n_samples
-            if in_tree[j]
-                continue
-            end
-            if min_reachability[j] < new_reachability
-                new_reachability = min_reachability[j]
+                if mutual_reachability_distance < new_reachability
+                    new_reachability = mutual_reachability_distance
+                    source_node = current_node
+                    new_node = j
+                end
+
+            elseif next_node_min_reach < new_reachability
+                new_reachability = next_node_min_reach
+                source_node = next_node_source
                 new_node = j
             end
+        
         end
 
-        source_node = current_sources[new_node]
         mst[i] = MST_edge_t(source_node, new_node, new_reachability)
-
         current_node = new_node
     end
-
     return mst
 end
 
@@ -1301,6 +1386,9 @@ function _sparse_mutual_reachability_graph(
 end
 
 ############################### HDBSCAN ######################################
+
+const INFTY = Inf
+const NOISE = -1
     
 
     
@@ -1492,42 +1580,47 @@ end
         HIERARCHY_t(8, 5, 2.8284271247461903, 5)
     =#
 
-    
-
-    function _hdbscan_prims(
+function _hdbscan_prims(
     X;
-    algo::String="kd_tree",
+    algo::String,
     min_samples::Int=5,
     alpha::Float64=1.0,
     metric::String="euclidean",
     leaf_size::Int=40,
     n_jobs=nothing,
-    metric_params...
-)
-    # Temporary correctness-first implementation:
-    # use the same dense pairwise + mutual reachability + MST pipeline
-    # as the brute path, but keep the prims signature for fit dispatch.
+    metric_params...)
+    
+    tree =
+        if algo == "kd_tree"
+            KDTree(permutedims(X))
+        elseif algo == "ball_tree"
+            BallTree(permutedims(X))
+        else
+            error("Unsupported algorithm: $algo")
+        end
 
-    if metric == "precomputed"
-        throw(ArgumentError(
-            "_hdbscan_prims does not support metric=\"precomputed\"; use brute path instead."
-        ))
-    end
-
-    X = Matrix{Float64}(X)
-
-    dist = _metric_object(metric)
-    D = pairwise(dist, X; dims=1)
-    D ./= alpha
-
-    mutual_reachability_ = mutual_reachability_graph(
-        copy(D);
-        min_samples=min_samples
+    _ , neighbors_distances = knn(
+        tree,
+        permutedims(X),
+        min_samples,
+        true
     )
 
-    min_spanning_tree = _brute_mst(
-        mutual_reachability_,
-        min_samples)
+    core_distances = [d[end] for d in neighbors_distances]
+
+    dist_metric =
+        if metric == "euclidean"
+            Euclidean()
+        else
+            error("Metric $metric not yet implemented in _hdbscan_prims")
+        end
+
+    min_spanning_tree = mst_from_data_matrix(
+        X,
+        core_distances,
+        dist_metric,
+        alpha
+    )
 
     return _process_mst(min_spanning_tree)
 end
@@ -1558,7 +1651,9 @@ end
     println(tree)
     =#
     
-    function _process_mst(min_spanning_tree::Vector{MST_edge_t})
+function _process_mst(min_spanning_tree::Vector{MST_edge_t})
+    order = sortperm([e.distance for e in min_spanning_tree])
+    min_spanning_tree = min_spanning_tree[order]
     return make_single_linkage(min_spanning_tree)
 end
 
