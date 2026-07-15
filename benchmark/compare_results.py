@@ -1,11 +1,15 @@
-from pathlib import Path
+# This file calls generate_results.jl and generate_results.py and generates a .cvs
+# comparison file for every hyperparameter present in experiments.py
 
+from pathlib import Path
+import subprocess
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 import dbcv
 from sklearn.decomposition import PCA
+from experiments import EXPERIMENTS
 
 BENCHMARK_DIR = Path(__file__).resolve().parent
 ROOT_DIR = BENCHMARK_DIR.parent
@@ -150,13 +154,13 @@ def plot_panel(ax, X_plot, labels, title, fit_time, dbcv):
     )
 
 
-def compare_datasets(dataset_names, run_name):
+def compare_datasets(dataset_names, run_name, make_plot=False):
     summary_rows = []
+    if make_plot:
+        fig, axes = plt.subplots(len(dataset_names), 2, figsize=(10, 4 * len(dataset_names)))
 
-    fig, axes = plt.subplots(len(dataset_names), 2, figsize=(10, 4 * len(dataset_names)))
-
-    if len(dataset_names) == 1:
-        axes = np.array([axes])
+        if len(dataset_names) == 1:
+            axes = np.array([axes])
 
     for i, dataset_name in enumerate(dataset_names):
         print(f"Comparing {dataset_name}...")
@@ -202,25 +206,27 @@ def compare_datasets(dataset_names, run_name):
 
         summary_rows.append(row)
 
-        plot_panel(
-            axes[i, 0],
-            X_plot,
-            py["labels"],
-            f"{dataset_name} - Python",
-            py["average_fit_time_sec"],
-            py_dbcv,
-        )
+        if make_plot:
 
-        plot_panel(
-            axes[i, 1],
-            X_plot,
-            jl["labels"],
-            f"{dataset_name} - Julia",
-            jl["average_fit_time_sec"],
-            jl_dbcv,
-        )
+            plot_panel(
+                axes[i, 0],
+                X_plot,
+                py["labels"],
+                f"{dataset_name} - Python",
+                py["average_fit_time_sec"],
+                py_dbcv,
+            )
 
-    fig.tight_layout()
+            plot_panel(
+                axes[i, 1],
+                X_plot,
+                jl["labels"],
+                f"{dataset_name} - Julia",
+                jl["average_fit_time_sec"],
+                jl_dbcv,
+            )
+
+            
 
     summary_df = pd.DataFrame(summary_rows)
 
@@ -228,20 +234,151 @@ def compare_datasets(dataset_names, run_name):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summary_path = out_dir / f"{run_name}_comparison_summary_julia_vs_python.csv"
-    plot_path = out_dir / f"{run_name}_clustering_visualized_julia_vs_python.png"
-
     summary_df.to_csv(summary_path, index=False, float_format="%.32f")
-    plt.savefig(plot_path, dpi=200, bbox_inches="tight")
-    plt.close()
+    
+    if make_plot:
+        fig.tight_layout()
+        plot_path = out_dir / f"{run_name}_clustering_plot_julia_vs_python.png"
+        plt.savefig(plot_path, dpi=200, bbox_inches="tight")
+        plt.close()
+        print(f"Saved plot to: {plot_path}")
 
     print(f"\nSaved summary to: {summary_path}")
-    print(f"Saved plot to:    {plot_path}")
-    print()
-    print(summary_df)
 
+    print(summary_df)
+    return summary_df
+
+def run_julia(experiment):
+
+    cmd = [
+        "julia",
+        str(BENCHMARK_DIR / "generate_results.jl"),
+
+        "--min_cluster_size",
+        str(experiment["min_cluster_size"]),
+
+        "--min_samples",
+        str(experiment["min_samples"]),
+
+        "--cluster_selection_epsilon",
+        str(experiment["cluster_selection_epsilon"]),
+
+        "--alpha",
+        str(experiment["alpha"]),
+
+        "--metric",
+        experiment["metric"],
+
+        "--algorithm",
+        experiment["algorithm"],
+
+        "--leaf_size",
+        str(experiment["leaf_size"]),
+
+        "--cluster_selection_method",
+        experiment["cluster_selection_method"],
+    ]
+
+    if experiment["max_cluster_size"] is not None:
+        cmd.extend([
+            "--max_cluster_size",
+            str(experiment["max_cluster_size"]),
+        ])
+
+    if experiment["allow_single_cluster"]:
+        cmd.append("--allow_single_cluster")
+
+    if experiment["copy"]:
+        cmd.append("--copy")
+
+    subprocess.run(cmd, check=True)
+
+def run_python(experiment):
+
+    cmd = [
+        "py",
+        str(BENCHMARK_DIR / "generate_results.py"),
+
+        "--min_cluster_size",
+        str(experiment["min_cluster_size"]),
+
+        "--min_samples",
+        str(experiment["min_samples"]),
+
+        "--cluster_selection_epsilon",
+        str(experiment["cluster_selection_epsilon"]),
+
+        "--alpha",
+        str(experiment["alpha"]),
+
+        "--metric",
+        experiment["metric"],
+
+        "--algorithm",
+        experiment["algorithm"],
+
+        "--leaf_size",
+        str(experiment["leaf_size"]),
+
+        "--cluster_selection_method",
+        experiment["cluster_selection_method"],
+    ]
+
+    if experiment["max_cluster_size"] is not None:
+        cmd.extend([
+            "--max_cluster_size",
+            str(experiment["max_cluster_size"]),
+        ])
+
+    if experiment["allow_single_cluster"]:
+        cmd.append("--allow_single_cluster")
+
+    if experiment["copy"]:
+        cmd.append("--copy")
+
+    subprocess.run(cmd, check=True)
+
+def dbcv_comparison_all_experiments(make_plot=False):
+    all_results = []
+    for experiment in EXPERIMENTS:
+
+        run_julia(experiment)
+
+        run_python(experiment)
+
+        summary_df = compare_datasets(dataset_names=DATASETS,
+            run_name=experiment["name"], make_plot=make_plot)
+
+        summary_df["experiment"] = experiment["name"]
+
+        summary_df["min_cluster_size"] = experiment["min_cluster_size"]
+
+        summary_df["min_samples"] = experiment["min_samples"]
+
+        summary_df["alpha"] = experiment["alpha"]
+
+        summary_df["cluster_selection_method"] = experiment["cluster_selection_method"]
+
+        all_results.append(summary_df)
+
+    final = pd.concat(all_results, ignore_index=True)
+
+    final["dbcv_difference"] = (
+        final["julia_dbcv"] - final["python_dbcv"]
+    )
+
+    final["fit_time_difference"] = (
+        final["julia_fit_time_sec"] - final["python_fit_time_sec"]
+    )
+
+    final.to_csv(
+        COMPARISON_RESULT_DIR / "all_experiments.csv",
+        index=False,
+        float_format="%.32f",)
 
 def main():
-    compare_datasets(DATASETS, run_name="all_datasets")
+
+    dbcv_comparison_all_experiments(make_plot=False)
 
 
 if __name__ == "__main__":

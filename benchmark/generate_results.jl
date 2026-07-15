@@ -1,16 +1,23 @@
+# This file can be run though REPL. It can accept hyperparameters in the command 
+# line and generate files in hdbscan\result\julia by fitting said hypermarameters
+# for the 11 datasets in hdbscan\data (as of now can't be modified).
+
 using CSV
 using DataFrames
 using Statistics
-include(joinpath(SRC_DIR, "HDBSCAN.jl"))
+using ArgParse
+using BenchmarkTools
+
 
 const BENCHMARK_DIR = @__DIR__
-const ROOT_DIR = normpath(joinpath(SRC_DIR, ".."))
+const ROOT_DIR = normpath(joinpath(BENCHMARK_DIR, ".."))
 const DATA_DIR = joinpath(ROOT_DIR, "data")
 const SRC_DIR = joinpath(ROOT_DIR, "src")
 const RESULT_DIR = joinpath(ROOT_DIR, "result")
 const JULIA_RESULT_DIR = joinpath(RESULT_DIR, "julia")
 
 mkpath(JULIA_RESULT_DIR)
+include(joinpath(SRC_DIR, "HDBSCAN.jl"))
 using .HDBSCAN
 
 # Dataset name -> has header?
@@ -85,18 +92,8 @@ function generate_results(model, dataset_name::String, hasheader::Bool; n::Int =
     println("Running Julia HDBSCAN on $dataset_name")
     X = load_dataset(dataset_name, hasheader)
 
-    sum = 0.0
-    average_fit_time = -1.0
-
-    for i = 1:n
-        t0 = time()
-        fit!(model, X)
-        fit_time = time() - t0
-        sum += fit_time
-    end
-
-    if sum > 0
-        average_fit_time = sum / n
+    b = @benchmark begin
+        fit!($model, $X)
     end
 
     cluster_labels = labels(model)
@@ -104,7 +101,7 @@ function generate_results(model, dataset_name::String, hasheader::Bool; n::Int =
 
     out = DataFrame(
         dataset = [dataset_name],
-        average_fit_time_sec = [average_fit_time],
+        average_fit_time_sec = [mean(b).time / 1e9],
         labels = [vector_to_string(cluster_labels)],
         probabilities = [vector_to_string(cluster_probabilities)],
     )
@@ -116,23 +113,80 @@ function generate_results(model, dataset_name::String, hasheader::Bool; n::Int =
 
 end
 
+function parse_commandline()
+
+    settings = ArgParseSettings()
+
+    @add_arg_table! settings begin
+
+        "--min_cluster_size"
+        help = "Minimum cluster size"
+        arg_type = Int
+        required = true
+
+        "--min_samples"
+        help = "Minimum samples"
+        arg_type = Int
+        required = true
+
+        "--cluster_selection_epsilon"
+        arg_type = Float64
+        default = 0.0
+
+        "--max_cluster_size"
+        arg_type = Int
+        default = -1
+
+        "--metric"
+        arg_type = String
+        default = "euclidean"
+
+        "--alpha"
+        arg_type = Float64
+        default = 1.0
+
+        "--algorithm"
+        arg_type = String
+        default = "auto"
+
+        "--leaf_size"
+        arg_type = Int
+        default = 40
+
+        "--cluster_selection_method"
+        arg_type = String
+        default = "eom"
+
+        "--allow_single_cluster"
+        action = :store_true
+
+        "--copy"
+        action = :store_true
+
+    end
+
+    return parse_args(settings)
+
+end
 
 function main()
 
-    # Example of Usage: min_cluster_size, min_sample_size are positional
+    args = parse_commandline()
+
     model = Hdbscan(
-        15, # min_cluster_size
-        5;  # min_sample_size
-        cluster_selection_epsilon = 0.0,
-        max_cluster_size = nothing,
-        metric = "euclidean",
+        args["min_cluster_size"],
+        args["min_samples"];
+        cluster_selection_epsilon = args["cluster_selection_epsilon"],
+        max_cluster_size = args["max_cluster_size"] == -1 ? nothing :
+                           args["max_cluster_size"],
+        metric = args["metric"],
         metric_params = Number[],
-        alpha = 1.0,
-        algorithm = "auto",
-        leaf_size = 40,
-        cluster_selection_method = "leaf",
-        allow_single_cluster = false,
-        copy = false,
+        alpha = args["alpha"],
+        algorithm = args["algorithm"],
+        leaf_size = args["leaf_size"],
+        cluster_selection_method = args["cluster_selection_method"],
+        allow_single_cluster = args["allow_single_cluster"],
+        copy = args["copy"],
     )
 
     generate_all_examples(model)
@@ -141,7 +195,7 @@ end
 
 function generate_all_examples(model::Hdbscan)
     for (dataset_name, hasheader) in DATASETS
-        generate_results(model, dataset_name, hasheader; n = 20)
+        generate_results(model, dataset_name, hasheader; n = 1)
     end
 end
 

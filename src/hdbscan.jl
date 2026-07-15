@@ -36,13 +36,19 @@ using Graphs
 using SimpleWeightedGraphs
 using SortingAlgorithms
 
-# Set parity to true in both HDBSCAN.jl and generate_results.py
-# to apply 14 digit rounding to distances on both
-# This will be useful to mitigate floating point errors
-# when comparing outputs between scikit-learn and julia
+# Edit here to add your pythonpath to use python argsort (remember to remove it
+# once you're done). It will use SIMD implementation.
+# It will will give the same tie-breaker/edge-case order as scikitlearn.
 
-parity = false
+pythonpath = ""
 
+ENV["JULIA_PYTHONCALL_EXE"] = pythonpath
+
+using PythonCall
+
+const np = pyimport("numpy")
+
+TIME = 0.0
 
 #=
     This library is based on scikit-learn python implementation version 1.8.0
@@ -531,8 +537,8 @@ function _do_labelling(
         label = NOISE
 
         while cluster != root_cluster &&
-              !haskey(cluster_label_map, cluster) &&
-              haskey(parent_map, cluster)
+                  !haskey(cluster_label_map, cluster) &&
+                  haskey(parent_map, cluster)
 
             cluster = parent_map[cluster]
         end
@@ -873,7 +879,7 @@ function _get_clusters(
 
     clusters = Set([c for c in keys(is_cluster) if is_cluster[c]])
 
-    cluster_map = Dict(c => i-1 for (i, c) in enumerate(sort(collect(clusters))))
+    cluster_map = Dict(c => i - 1 for (i, c) in enumerate(sort(collect(clusters))))
 
     reverse_cluster_map = Dict(v => k for (k, v) in cluster_map)
 
@@ -1122,7 +1128,7 @@ function make_single_linkage(mst::Vector{MSTEdge})
     # Note length(mst) is one fewer than the number of samples
     n_samples = length(mst) + 1
 
-    single_linkage = Vector{HierarchyTree}(undef, n_samples-1)
+    single_linkage = Vector{HierarchyTree}(undef, n_samples - 1)
 
     uf = UnionFind(n_samples)
 
@@ -1728,10 +1734,6 @@ function _hdbscan_brute(
 
     distance_matrix = metric == "precomputed" ? copy(X) : pairwise(dist_metric, X; dims = 1)
 
-    if parity
-        distance_matrix = round.(distance_matrix; digits = 14)
-    end
-
     distance_matrix ./= alpha
 
     mutual_reachability_ = mutual_reachability_graph(distance_matrix; min_samples)
@@ -1793,19 +1795,18 @@ function _hdbscan_prims(
         dist_metric = _get_metric_object(metric, metric_params[1], metric_params[2])
     end
 
+    columndata = permutedims(X)
+
     tree = if algo == "kd_tree"
-        KDTree(permutedims(X), dist_metric; leafsize = leaf_size)
+        KDTree(columndata, dist_metric; leafsize = leaf_size)
     elseif algo == "ball_tree"
-        BallTree(permutedims(X), dist_metric; leafsize = leaf_size)
+        BallTree(columndata, dist_metric; leafsize = leaf_size)
     else
         error("Unsupported algorithm: $algo")
     end
 
-    _, neighbors_distances = knn(tree, permutedims(X), min_samples, true)
+    _, neighbors_distances = knn(tree, columndata, min_samples, true)
 
-    if parity
-        neighbors_distances = [round.(v; digits = 14) for v in neighbors_distances]
-    end
 
     core_distances = [d[end] for d in neighbors_distances]
 
@@ -1815,6 +1816,7 @@ function _hdbscan_prims(
     return _process_mst(min_spanning_tree)
 
 end
+
 
 """
     _process_mst(min_spanning_tree)
@@ -1832,11 +1834,19 @@ the single linkage hierarchy.
 - `Vector{HierarchyTree}`: Single linkage hierarchy represented as a
   dendrogram.
 """
+
 function _process_mst(min_spanning_tree::Vector{MSTEdge})
 
-    # Sort edges of the min_spanning_tree by weight
-    # Note: scikit-learn uses Numpy's argsort (QuickSort)
-    order = sortperm([e.distance for e in min_spanning_tree], alg = QuickSort)
+    # Note: scikit-learn uses Numpy's argsort (SIMD implementation)
+    # It is not stable.
+
+    if pythonpath != ""
+        order =
+            pyconvert(Vector{Int}, np.argsort([e.distance for e in min_spanning_tree])) .+= 1
+    else
+        # Sort edges of the min_spanning_tree by weight
+        order = sortperm([e.distance for e in min_spanning_tree], alg = QuickSort)
+    end
     min_spanning_tree = min_spanning_tree[order]
     # Convert edge list into standard hierarchical clustering format
     return make_single_linkage(min_spanning_tree)
@@ -1865,6 +1875,8 @@ probabilities, and any requested cluster centers.
 - `Hdbscan`: The fitted model.
 """
 function fit!(model::Hdbscan, X; y = nothing)
+
+    TIME = time_ns()
 
     if model.copy == "warn"
         @warn "The default value of `copy` will change from false to true in
@@ -2049,7 +2061,6 @@ function fit!(model::Hdbscan, X; y = nothing)
         model.cluster_selection_epsilon,
         model.max_cluster_size,
     )
-
     if model.metric != "precomputed" && !all_finite
         # Remap indices to align with original data in the case of
         # non-finite entries. Samples with inf are mapped to -1 and

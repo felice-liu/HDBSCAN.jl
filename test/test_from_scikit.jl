@@ -5,6 +5,7 @@ using Distances
 using Clustering
 using HDBSCAN
 
+
 const OUTLIER_SET = Set([
     -1,
     HDBSCAN._OUTLIER_ENCODING["infinite"].label,
@@ -68,6 +69,155 @@ X, y = shuffle_data(X, y, seed = 7)
 
 X = standardize(X)
 
+# Start fowlkes_mallows_score
+
+function comb2(n::Int)
+    n < 2 && return 0
+    return n * (n - 1) € 2
+end
+
+function contingency_matrix(labels_true, labels_pred)
+
+    true_ids = unique(labels_true)
+    pred_ids = unique(labels_pred)
+
+    T = Dict(v => i for (i,v) in enumerate(true_ids))
+    P = Dict(v => i for (i,v) in enumerate(pred_ids))
+
+    M = zeros(Int, length(true_ids), length(pred_ids))
+
+    for (t,p) in zip(labels_true, labels_pred)
+        M[T[t], P[p]] += 1
+    end
+
+    return M
+end
+
+function fowlkes_mallows_score(labels_true, labels_pred)
+
+    C = contingency_matrix(labels_true, labels_pred)
+
+    tp = sum(comb2(v) for v in C)
+
+    row_sum = vec(sum(C, dims=2))
+    col_sum = vec(sum(C, dims=1))
+
+    fp = sum(comb2(v) for v in col_sum) - tp
+    fn = sum(comb2(v) for v in row_sum) - tp
+
+    denom = sqrt((tp + fp) * (tp + fn))
+
+    denom == 0 && return 0.0
+
+    return tp / denom
+end
+
+# end fowlkes_mallows_score
+
+# Helper
+
+function check_label_quality(labels; threshold=0.99)
+
+    clusters = setdiff(Set(labels), OUTLIER_SET)
+
+    @test length(clusters) == 3
+
+    score = fowlkes_mallows_score(labels, y)
+
+    @test score > threshold
+end
+
+
+@testset "Outlier Data" begin
+
+    for outlier_type in ("infinite", "missing")
+
+        outlier =
+            outlier_type == "infinite" ? Inf : NaN
+
+        expected_label =
+            HDBSCAN._OUTLIER_ENCODING[outlier_type].label
+
+        X_outlier = copy(X)
+
+        X_outlier[1, :] .= [outlier, 1.0]
+        X_outlier[6, :] .= [outlier, outlier]
+
+        model = Hdbscan(copy=false)
+
+        fit!(model, X_outlier)
+
+        labels = model.labels_
+        probs = model.probabilities_
+
+        missing_idx = findall(labels .== expected_label)
+
+        @test missing_idx == [1,6]
+
+        if outlier_type == "infinite"
+            prob_idx = findall(probs .== 0)
+        else
+            prob_idx = findall(isnan.(probs))
+        end
+
+        @test prob_idx == [1,6]
+
+        clean_idx = vcat(2:5, 7:200)
+
+        clean_model = Hdbscan(copy=false)
+
+        fit!(clean_model, X_outlier[clean_idx,:])
+
+        @test clean_model.labels_ == labels[clean_idx]
+
+    end
+
+end
+
+@testset "Feature Array" begin
+
+    labels = fit_predict(Hdbscan(copy=false), X)
+
+    check_label_quality(labels)
+
+end
+
+@testset "Algorithms" begin
+
+    for algo in ALGORITHMS
+
+        labels = fit_predict(
+            Hdbscan(
+                algorithm=algo,
+                copy=false,
+            ),
+            X,
+        )
+
+        check_label_quality(labels)
+
+    end
+
+end
+
+@testset "Precomputed Distance Matrix" begin
+
+    D = pairwise(Euclidean(), X; dims=1)
+    D_original = copy(D)
+
+    model = Hdbscan(
+        metric="precomputed",
+        copy=true,
+    )
+
+    labels = fit_predict(model, D)
+
+    # Ensure copy=true doesn't modify the original matrix
+    @test D == D_original
+
+    check_label_quality(labels)
+
+end
 
 @testset "No Clusters" begin
     # Tests that HDBSCAN correctly does not generate a valid cluster when the
@@ -83,7 +233,7 @@ end
 @testset "Minimum Cluster Size" begin
     # Test that the smallest non-noise cluster has at least "min_cluster_size"
     # many points
-    for min_cluster_size = 2:(size(X, 1)-1)
+    for min_cluster_size in (2, 3, 5, 10, 20, 50, 100, 150,)
 
         labels = fit_predict(Hdbscan(min_cluster_size, nothing, copy = false), X)
 
@@ -184,6 +334,45 @@ end
 
     @test size(model.centroids_, 1) == 0
     @test size(model.medoids_, 1) == 0
+
+end
+
+@testset "Allow Single Cluster" begin
+
+    Random.seed!(0)
+
+    data = rand(150,2)
+
+    model = Hdbscan(
+        min_cluster_size=5,
+        cluster_selection_method="eom",
+        allow_single_cluster=true,
+        cluster_selection_epsilon=0.0,
+        copy=false,
+    )
+
+    labels = fit_predict(model,data)
+
+    unique_labels = unique(labels)
+
+    @test length(unique_labels) == 2
+    @test count(labels .== -1) > 30
+
+    model = Hdbscan(
+        min_cluster_size=5,
+        cluster_selection_method="eom",
+        allow_single_cluster=true,
+        cluster_selection_epsilon=0.18,
+        algorithm="kd_tree",
+        copy=false,
+    )
+
+    labels = fit_predict(model,data)
+
+    unique_labels = unique(labels)
+
+    @test length(unique_labels) == 2
+    @test count(labels .== -1) == 2
 
 end
 
