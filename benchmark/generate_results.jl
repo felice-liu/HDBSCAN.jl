@@ -16,9 +16,7 @@ const SRC_DIR = joinpath(ROOT_DIR, "src")
 const RESULT_DIR = joinpath(ROOT_DIR, "result")
 const JULIA_RESULT_DIR = joinpath(RESULT_DIR, "julia")
 
-mkpath(JULIA_RESULT_DIR)
-include(joinpath(SRC_DIR, "HDBSCAN.jl"))
-using .HDBSCAN
+using HDBSCAN
 
 # Dataset name -> has header?
 const DATASETS = Dict{String,Bool}([
