@@ -36,18 +36,6 @@ using Graphs
 using SimpleWeightedGraphs
 using SortingAlgorithms
 
-# Edit here to add your pythonpath to use python argsort (remember to remove it
-# once you're done). It will use SIMD implementation.
-# It will will give the same tie-breaker/edge-case order as scikitlearn.
-
-pythonpath = ""
-
-ENV["JULIA_PYTHONCALL_EXE"] = pythonpath
-
-using PythonCall
-
-const np = pyimport("numpy")
-
 
 #=
     This library is based on scikit-learn python implementation version 1.8.0
@@ -1839,13 +1827,9 @@ function _process_mst(min_spanning_tree::Vector{MSTEdge})
     # Note: scikit-learn uses Numpy's argsort (SIMD implementation)
     # It is not stable.
 
-    if pythonpath != ""
-        order =
-            pyconvert(Vector{Int}, np.argsort([e.distance for e in min_spanning_tree])) .+= 1
-    else
-        # Sort edges of the min_spanning_tree by weight
-        order = sortperm([e.distance for e in min_spanning_tree], alg = QuickSort)
-    end
+    # Sort edges of the min_spanning_tree by weight
+    order = sortperm([e.distance for e in min_spanning_tree], alg = QuickSort)
+    
     min_spanning_tree = min_spanning_tree[order]
     # Convert edge list into standard hierarchical clustering format
     return make_single_linkage(min_spanning_tree)
