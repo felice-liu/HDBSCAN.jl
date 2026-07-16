@@ -140,7 +140,7 @@ Ratios greater than 1 indicate that Julia is faster than Python.
 |   NoStructure     |   1,05E-02            |   7,25E-03           |    **1,45x**       |
 |   Varied          |   1,03E-02            |   7,10E-03           |    **1.45x**       |
 |   CardiacArrest   |   1,12E-02            |   7,13E-03           |    **1,57x**       |
-|   HeartFailure    |   1,43E-02            |   9,07E-03           |    **1,57x**        |
+|   HeartFailure    |   1,43E-02            |   9,07E-03           |    **1,57x**       |
 |   NeuroBlastoma   |   4,22E-03            |   1,86E-03           |    **2,27x**       |
 |   Sepsis          |   7,56E-02            |   5,68E-02           |    **1,33x**       |
 |   Type1Diabetes   |   2,79E-03            |   7,51E-04           |    **3,71x**       |
@@ -166,18 +166,9 @@ Validation includes:
 
 ## References
 
-```bibtex
-    @article{campello2015hierarchical,
-    author = {Campello, Ricardo J. G. B. and Moulavi, Davoud and Zimek, Arthur and Sander, J{\"o}rg},
-    title = {Hierarchical Density Estimates for Data Clustering, Visualization, and Outlier Detection},
-    journal = {ACM Transactions on Knowledge Discovery from Data},
-    volume = {10},
-    number = {1},
-    pages = {5},
-    year = {2015},
-    doi = {10.1145/2733381}
-    }
-```
+> Ricardo JGB Campello, et al. "Hierarchical density estimates for data clustering, visualization,
+and outlier detection." ACM Transactions on Knowledge Discovery from Data (TKDD) 10.1 (2015): 1-51.
+[https://doi.org/10.1145/2733381](https://doi.org/10.1145/2733381)
 
 ---
 ## License
