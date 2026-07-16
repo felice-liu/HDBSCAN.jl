@@ -46,14 +46,14 @@ algorithm that reliably returns meaningful clusters (if there are any).
 Install from GitHub
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/felice-liu/HDBSCAN.jl")
+Pkg.add(url="https://github.com/felice-liu/Hdbscan.jl")
 
 ```
 or install the registered package directly
 
 ```julia
 using Pkg
-Pkg.add("HDBSCAN")
+Pkg.add("Hdbscan")
 
 ```
 ## Quick Start

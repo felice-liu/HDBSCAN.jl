@@ -27,7 +27,7 @@ nclusters
 # Internal API
 
 ```@autodocs
-Modules = [HDBSCAN]
+Modules = [Hdbscan]
 Private = true
 Order = [:function]
 ```

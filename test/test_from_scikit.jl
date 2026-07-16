@@ -2,13 +2,13 @@ using Test
 using Random
 using Statistics
 using Distances
-using HDBSCAN
+using Hdbscan
 
 
 const OUTLIER_SET = Set([
     -1,
-    HDBSCAN._OUTLIER_ENCODING["infinite"].label,
-    HDBSCAN._OUTLIER_ENCODING["missing"].label,
+    Hdbscan._OUTLIER_ENCODING["infinite"].label,
+    Hdbscan._OUTLIER_ENCODING["missing"].label,
 ])
 
 # Equivalent of StandardScaler
@@ -194,7 +194,7 @@ end
 
     fit!(est, Xtest)
 
-    condensed = HDBSCAN._condense_tree(est._single_linkage_tree, est.min_cluster_size)
+    condensed = Hdbscan._condense_tree(est._single_linkage_tree, est.min_cluster_size)
 
     n_samples = size(Xtest, 1)
 
@@ -202,7 +202,7 @@ end
 
     cluster_label_map = Dict(n_samples+2 => 0, n_samples+3 => 1, n_samples+4 => 2)
 
-    labels = HDBSCAN._do_labelling(condensed, clusters, cluster_label_map, false, 0.0)
+    labels = Hdbscan._do_labelling(condensed, clusters, cluster_label_map, false, 0.0)
 
     first_index = Dict()
 
@@ -229,21 +229,21 @@ end
     max_lambda = 1.5
     n_samples = 5
 
-    condensed = HDBSCAN.CondensedTree[
-        HDBSCAN.CondensedTree(6, 3, max_lambda, 1),
-        HDBSCAN.CondensedTree(6, 2, 0.1, 1),
-        HDBSCAN.CondensedTree(6, 1, max_lambda, 1),
-        HDBSCAN.CondensedTree(6, 4, 0.2, 1),
-        HDBSCAN.CondensedTree(6, 5, 0.3, 1),
+    condensed = Hdbscan.CondensedTree[
+        Hdbscan.CondensedTree(6, 3, max_lambda, 1),
+        Hdbscan.CondensedTree(6, 2, 0.1, 1),
+        Hdbscan.CondensedTree(6, 1, max_lambda, 1),
+        Hdbscan.CondensedTree(6, 4, 0.2, 1),
+        Hdbscan.CondensedTree(6, 5, 0.3, 1),
     ]
 
-    labels = HDBSCAN._do_labelling(condensed, Set([6]), Dict(6 => 0), true, 1.0)
+    labels = Hdbscan._do_labelling(condensed, Set([6]), Dict(6 => 0), true, 1.0)
 
     expected_noise = count(c -> c.value < 1.0, condensed)
 
     @test count(labels .== -1) == expected_noise
 
-    labels = HDBSCAN._do_labelling(condensed, Set([6]), Dict(6 => 0), true, 0.0)
+    labels = Hdbscan._do_labelling(condensed, Set([6]), Dict(6 => 0), true, 0.0)
 
     expected_noise = count(c -> c.value < max_lambda, condensed)
 

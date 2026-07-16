@@ -20,7 +20,7 @@
     Mining, Springer, pp 160-172. 2013
 =#
 
-module HDBSCAN
+module Hdbscan
 
 export Hdbscan, fit!, fit_predict
 
@@ -48,7 +48,6 @@ using PythonCall
 
 const np = pyimport("numpy")
 
-TIME = 0.0
 
 #=
     This library is based on scikit-learn python implementation version 1.8.0
@@ -63,7 +62,7 @@ TIME = 0.0
     ref: https://github.com/scikit-learn/scikit-learn/tree/1.8.X/sklearn/cluster/_hdbscan
 =#
 
-################################ _tree.pyx  ###################################
+# Trees
 
 # 1-based indexing
 
@@ -897,7 +896,7 @@ function _get_clusters(
 
 end
 
-################################# _linkage ###################################
+# linkage
 
 struct MSTEdge
     current_node::Int64
@@ -1156,7 +1155,7 @@ function make_single_linkage(mst::Vector{MSTEdge})
 
 end
 
-################################ _reachability ###############################
+# reachability
 
 """
     mutual_reachability_graph(distance_matrix, min_samples=5;
@@ -1357,7 +1356,7 @@ function _sparse_mutual_reachability_graph!(
 
 end
 
-############################### HDBSCAN ######################################
+# HDBSCAN
 
 
 
@@ -1876,7 +1875,6 @@ probabilities, and any requested cluster centers.
 """
 function fit!(model::Hdbscan, X; y = nothing)
 
-    TIME = time_ns()
 
     if model.copy == "warn"
         @warn "The default value of `copy` will change from false to true in
