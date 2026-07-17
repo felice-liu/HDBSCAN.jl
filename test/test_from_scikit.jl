@@ -2,13 +2,13 @@ using Test
 using Random
 using Statistics
 using Distances
-using Hdbscan
+using HDBSCAN
 
 
 const OUTLIER_SET = Set([
     -1,
-    Hdbscan._OUTLIER_ENCODING["infinite"].label,
-    Hdbscan._OUTLIER_ENCODING["missing"].label,
+    HDBSCAN._OUTLIER_ENCODING["infinite"].label,
+    HDBSCAN._OUTLIER_ENCODING["missing"].label,
 ])
 
 # Equivalent of StandardScaler
@@ -73,7 +73,7 @@ X = standardize(X)
     # Tests that HDBSCAN correctly does not generate a valid cluster when the
     # min_cluster_size is too large for the data.
 
-    labels = fit_predict(Hdbscan((size(X, 1)-1), nothing; copy = false), X)
+    labels = fit_predict(HDBSCAN((size(X, 1)-1), nothing; copy = false), X)
 
     @test all(label in OUTLIER_SET for label in labels)
 
@@ -85,7 +85,7 @@ end
     # many points
     for min_cluster_size in (2, 3, 5, 10, 20, 50, 100, 150,)
 
-        labels = fit_predict(Hdbscan(min_cluster_size, nothing, copy = false), X)
+        labels = fit_predict(HDBSCAN(min_cluster_size, nothing, copy = false), X)
 
         cluster_labels = filter(!=(-1), labels)
 
@@ -110,7 +110,7 @@ end
 
     for algo in ("kd_tree", "ball_tree")
 
-        model = Hdbscan(5, nothing, metric = "precomputed", algorithm = algo, copy = false)
+        model = HDBSCAN(5, nothing, metric = "precomputed", algorithm = algo, copy = false)
 
         @test_throws ArgumentError fit!(model, X)
 
@@ -123,7 +123,7 @@ end
     # Tests that HDBSCAN correctly raises an error when setting "min_samples"
     # larger than the number of samples.
 
-    model = Hdbscan(5, size(X, 1)+1, copy = false)
+    model = HDBSCAN(5, size(X, 1)+1, copy = false)
 
     @test_throws ArgumentError fit!(model, X)
 
@@ -136,7 +136,7 @@ end
 
     D[1, 1] = NaN
 
-    model = Hdbscan(5, nothing, metric = "precomputed", copy = false)
+    model = HDBSCAN(5, nothing, metric = "precomputed", copy = false)
 
     @test_throws ArgumentError fit!(model, D)
 
@@ -159,7 +159,7 @@ end
         seed = 0,
     )
 
-    model = Hdbscan(5, nothing, store_centers = "both", copy = false)
+    model = HDBSCAN(5, nothing, store_centers = "both", copy = false)
 
     fit!(model, H)
 
@@ -190,11 +190,11 @@ end
         seed = 1234,
     )
 
-    est = Hdbscan(copy = false)
+    est = HDBSCAN(copy = false)
 
     fit!(est, Xtest)
 
-    condensed = Hdbscan._condense_tree(est._single_linkage_tree, est.min_cluster_size)
+    condensed = HDBSCAN._condense_tree(est._single_linkage_tree, est.min_cluster_size)
 
     n_samples = size(Xtest, 1)
 
@@ -202,7 +202,7 @@ end
 
     cluster_label_map = Dict(n_samples+2 => 0, n_samples+3 => 1, n_samples+4 => 2)
 
-    labels = Hdbscan._do_labelling(condensed, clusters, cluster_label_map, false, 0.0)
+    labels = HDBSCAN._do_labelling(condensed, clusters, cluster_label_map, false, 0.0)
 
     first_index = Dict()
 
@@ -229,21 +229,21 @@ end
     max_lambda = 1.5
     n_samples = 5
 
-    condensed = Hdbscan.CondensedTree[
-        Hdbscan.CondensedTree(6, 3, max_lambda, 1),
-        Hdbscan.CondensedTree(6, 2, 0.1, 1),
-        Hdbscan.CondensedTree(6, 1, max_lambda, 1),
-        Hdbscan.CondensedTree(6, 4, 0.2, 1),
-        Hdbscan.CondensedTree(6, 5, 0.3, 1),
+    condensed = HDBSCAN.CondensedTree[
+        HDBSCAN.CondensedTree(6, 3, max_lambda, 1),
+        HDBSCAN.CondensedTree(6, 2, 0.1, 1),
+        HDBSCAN.CondensedTree(6, 1, max_lambda, 1),
+        HDBSCAN.CondensedTree(6, 4, 0.2, 1),
+        HDBSCAN.CondensedTree(6, 5, 0.3, 1),
     ]
 
-    labels = Hdbscan._do_labelling(condensed, Set([6]), Dict(6 => 0), true, 1.0)
+    labels = HDBSCAN._do_labelling(condensed, Set([6]), Dict(6 => 0), true, 1.0)
 
     expected_noise = count(c -> c.value < 1.0, condensed)
 
     @test count(labels .== -1) == expected_noise
 
-    labels = Hdbscan._do_labelling(condensed, Set([6]), Dict(6 => 0), true, 0.0)
+    labels = HDBSCAN._do_labelling(condensed, Set([6]), Dict(6 => 0), true, 0.0)
 
     expected_noise = count(c -> c.value < max_lambda, condensed)
 

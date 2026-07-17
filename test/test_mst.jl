@@ -1,28 +1,28 @@
 using Test
-using Hdbscan
+using HDBSCAN
 
 @testset "UnionFind" begin
 
-    uf = Hdbscan.UnionFind(4)
+    uf = HDBSCAN.UnionFind(4)
 
-    @test Hdbscan.uf_find!(uf, 1) == 1
-    @test Hdbscan.uf_find!(uf, 2) == 2
+    @test HDBSCAN.uf_find!(uf, 1) == 1
+    @test HDBSCAN.uf_find!(uf, 2) == 2
 
-    Hdbscan.uf_union!(uf, 1, 2)
+    HDBSCAN.uf_union!(uf, 1, 2)
 
     root = uf.next_label-1
 
-    @test Hdbscan.uf_find!(uf, 1) == root
-    @test Hdbscan.uf_find!(uf, 2) == root
+    @test HDBSCAN.uf_find!(uf, 1) == root
+    @test HDBSCAN.uf_find!(uf, 2) == root
 
 end
 
 @testset "make_single_linkage" begin
 
     mst =
-        [Hdbscan.MSTEdge(1, 2, 0.1), Hdbscan.MSTEdge(3, 4, 0.2), Hdbscan.MSTEdge(5, 6, 0.3)]
+        [HDBSCAN.MSTEdge(1, 2, 0.1), HDBSCAN.MSTEdge(3, 4, 0.2), HDBSCAN.MSTEdge(5, 6, 0.3)]
 
-    tree = Hdbscan.make_single_linkage(mst)
+    tree = HDBSCAN.make_single_linkage(mst)
 
     @test tree[1].left_node == 1
     @test tree[1].right_node == 2
@@ -47,10 +47,10 @@ end
         6 8 3 0
     ]
 
-    mst = Hdbscan.mst_from_mutual_reachability(Float64.(M))
+    mst = HDBSCAN.mst_from_mutual_reachability(Float64.(M))
 
     expected =
-        [Hdbscan.MSTEdge(1, 2, 1), Hdbscan.MSTEdge(2, 3, 2), Hdbscan.MSTEdge(3, 4, 3)]
+        [HDBSCAN.MSTEdge(1, 2, 1), HDBSCAN.MSTEdge(2, 3, 2), HDBSCAN.MSTEdge(3, 4, 3)]
 
     @test mst == expected
 
@@ -59,9 +59,9 @@ end
 @testset "_process_mst" begin
 
     mst =
-        [Hdbscan.MSTEdge(1, 2, 3.0), Hdbscan.MSTEdge(2, 3, 1.0), Hdbscan.MSTEdge(3, 4, 2.0)]
+        [HDBSCAN.MSTEdge(1, 2, 3.0), HDBSCAN.MSTEdge(2, 3, 1.0), HDBSCAN.MSTEdge(3, 4, 2.0)]
 
-    hierarchy = Hdbscan._process_mst(mst)
+    hierarchy = HDBSCAN._process_mst(mst)
 
     @test hierarchy[1].value == 1.0
     @test hierarchy[2].value == 2.0

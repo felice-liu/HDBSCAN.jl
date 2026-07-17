@@ -16,7 +16,7 @@ const SRC_DIR = joinpath(ROOT_DIR, "src")
 const RESULT_DIR = joinpath(ROOT_DIR, "result")
 const JULIA_RESULT_DIR = joinpath(RESULT_DIR, "julia")
 
-using Hdbscan
+using HDBSCAN
 
 # Dataset name -> has header?
 const DATASETS = Dict{String,Bool}([
@@ -171,7 +171,7 @@ function main()
 
     args = parse_commandline()
 
-    model = Hdbscan(
+    model = HDBSCAN(
         args["min_cluster_size"],
         args["min_samples"];
         cluster_selection_epsilon = args["cluster_selection_epsilon"],

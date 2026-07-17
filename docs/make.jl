@@ -1,8 +1,8 @@
 using Documenter
-using Hdbscan
+using HDBSCAN
 
 makedocs(
-    sitename = "Hdbscan.jl",
-    modules = [Hdbscan],
+    sitename = "HDBSCAN.jl",
+    modules = [HDBSCAN],
     pages = ["Home" => "index.md", "API" => "api.md"],
 )

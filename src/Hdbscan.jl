@@ -20,7 +20,7 @@
     Mining, Springer, pp 160-172. 2013
 =#
 
-module Hdbscan
+module HDBSCAN
 
 export Hdbscan, fit!, fit_predict
 

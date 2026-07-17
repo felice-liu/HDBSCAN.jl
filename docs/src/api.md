@@ -3,7 +3,7 @@
 ## Model
 
 ```@docs
-Hdbscan
+HDBSCAN
 ```
 
 ## Fitting
@@ -27,7 +27,7 @@ nclusters
 # Internal API
 
 ```@autodocs
-Modules = [Hdbscan]
+Modules = [HDBSCAN]
 Private = true
 Order = [:function]
 ```

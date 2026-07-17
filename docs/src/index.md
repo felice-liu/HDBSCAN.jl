@@ -1,6 +1,6 @@
-# Hdbscan.jl
+# HDBSCAN.jl
 
-Welcome to the documentation for Hdbscan.jl.
+Welcome to the documentation for HDBSCAN.jl.
 
 ```@contents
 ```

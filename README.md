@@ -46,14 +46,14 @@ algorithm that reliably returns meaningful clusters (if there are any).
 Install from GitHub
 ```julia
 using Pkg
-Pkg.add(url="https://github.com/felice-liu/Hdbscan.jl")
+Pkg.add(url="https://github.com/felice-liu/HDBSCAN.jl")
 
 ```
 or install the registered package directly
 
 ```julia
 using Pkg
-Pkg.add("Hdbscan")
+Pkg.add("HDBSCAN")
 
 ```
 ## Quick Start
@@ -76,7 +76,7 @@ blobs = SyntheticDatasets.make_blobs(
     random_state = nothing)
 
 # min_cluster_size = 15, min_sample_size = 5
-model = Hdbscan(15, 5; metric="euclidean")
+model = HDBSCAN(15, 5; metric="euclidean")
 
 fit!(model, blobs)
 

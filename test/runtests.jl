@@ -1,5 +1,5 @@
 using Test
-using Hdbscan
+using HDBSCAN
 
 include("test_tree.jl")
 include("test_mst.jl")
