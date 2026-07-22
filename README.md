@@ -62,9 +62,27 @@ A simple clustering example is provided below.
 
 ```julia
 import Pkg
-Pkg.add("MLJ")
+
+function is_installed(pkg::String)
+    deps = Pkg.dependencies()
+    any(dep.name == pkg for dep in values(deps))
+end
+
+if !is_installed("HDBSCAN")
+    Pkg.add("HDBSCAN")
+end
+
+if !is_installed("MLJ")
+    Pkg.add("MLJ")
+end
+
+if !is_installed("DensityBasedClusteringValidation")
+    Pkg.add("DensityBasedClusteringValidation")
+end
+
 import HDBSCAN
 import MLJ
+using DensityBasedClusteringValidation: dbcv
 
 X, y = MLJ.make_blobs(1000, 2, as_table=false)
 
@@ -76,8 +94,15 @@ HDBSCAN.fit!(model, X)
 labels = HDBSCAN.labels(model)
 probabilities = HDBSCAN.probabilities(model)
 
+println("Labels: ")
 println(labels)
+println("Probabilities: ")
 println(probabilities)
+
+score = dbcv(X, labels)
+
+println("DBCV Score: ")
+println(score)
 ```
 ---
 
