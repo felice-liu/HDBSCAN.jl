@@ -62,26 +62,19 @@ A simple clustering example is provided below.
 
 ```julia
 import Pkg
-Pkg.add("SyntheticDatasets")
+Pkg.add("MLJ")
 import HDBSCAN
-import SyntheticDatasets
+import MLJ
 
-blobs = SyntheticDatasets.make_blobs(
-    n_samples = 1000, 
-    n_features = 2,
-    centers = [-1 1; -0.5 0.5], 
-    cluster_std = 0.25,
-    center_box = (-2.0, 2.0), 
-    shuffle = true,
-    random_state = nothing)
+X, y = MLJ.make_blobs(1000, 2, as_table=false)
 
 # min_cluster_size = 15, min_sample_size = 5
-model = HDBSCAN(15, 5; metric="euclidean")
+model = HDBSCAN.Hdbscan(15, 5; metric="euclidean")
 
-fit!(model, blobs)
+HDBSCAN.fit!(model, X)
 
-labels = labels(model)
-probabilities = probabilities(model)
+labels = HDBSCAN.labels(model)
+probabilities = HDBSCAN.probabilities(model)
 
 println(labels)
 println(probabilities)
